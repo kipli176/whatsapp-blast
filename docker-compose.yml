@@ -1,0 +1,29 @@
+
+services:
+  wa-multiapp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wa-multiapp
+    ports:
+      - "3002:3000"
+    environment:
+      TZ: Asia/Jakarta
+      NODE_ENV: production
+      PORT: 3000
+      # simpan kredensial/session Baileys ke volume persisten
+      AUTH_ROOT: /data/auth_info
+    volumes:
+      # volume persisten untuk auth/session
+      - auth_data:/data/auth_info
+      # (opsional) kalau kamu ingin serve index.html dari container,
+      # pastikan sudah ada folder ./public di project
+      - ./public:/usr/src/app/public:rw
+    restart: unless-stopped
+    networks:
+      - cloudflared
+volumes:
+  auth_data:
+networks:
+  cloudflared:
+    external: true

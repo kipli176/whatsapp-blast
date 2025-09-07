@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>WhatsApp Bot • Broadcast UI</title>
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- QR code renderer (browser) -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+
+  <style>
+    :root{
+      --wa-deep:#075E54;
+      --wa-accent:#25D366;
+      --wa-bg:#0b141a;
+      --wa-panel:#111b21;
+      --wa-input:#202c33;
+      --wa-text:#e9edef;
+      --wa-muted:#8696a0;
+      --wa-danger:#ef4444;
+    }
+    html, body { background: var(--wa-bg); color: var(--wa-text); }
+    *::-webkit-scrollbar{ width:10px; height:10px; }
+    *::-webkit-scrollbar-thumb{ background:#2a3942; border-radius:8px; }
+    *::-webkit-scrollbar-track{ background:transparent; }
+    .chip{ background:var(--wa-input); border:1px solid rgba(255,255,255,.06); }
+    .chip button{ color:#fca5a5; }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <!-- Navbar -->
+  <header class="w-full bg-[var(--wa-deep)] shadow-lg h-[64px]">
+    <div class="h-full mx-auto max-w-6xl px-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-full bg-[var(--wa-accent)] grid place-items-center font-semibold text-black">WA</div>
+        <div>
+          <h1 class="text-lg font-semibold tracking-wide">WhatsApp Bot</h1>
+          <p id="subtitle" class="text-xs text-[var(--wa-muted)]">UI untuk broadcast & kirim pesan</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span id="statusDot" class="inline-block w-3 h-3 rounded-full bg-yellow-400 animate-pulse"></span>
+        <span id="statusLabel" class="text-sm">Connecting</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== Screen: QR First ===== -->
+  <section id="screen-qr" class="min-h-[calc(100vh-64px)] flex items-center justify-center p-4">
+    <div class="w-full max-w-3xl">
+      <div class="bg-[var(--wa-panel)] rounded-2xl shadow border border-white/5 overflow-hidden">
+        <div class="bg-[var(--wa-input)]/60 px-6 py-4 flex items-center justify-between">
+          <h2 class="text-base font-semibold">Scan untuk tersambung</h2>
+          <span class="text-xs text-[var(--wa-muted)]">Realtime via SSE</span>
+        </div>
+
+        <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="rounded-2xl bg-[var(--wa-input)] p-4 grid place-items-center">
+            <canvas id="qrCanvas" width="280" height="280" class="rounded"></canvas>
+          </div>
+
+          <div class="space-y-4">
+            <div>
+              <h3 class="font-semibold mb-2">Langkah-langkah</h3>
+              <ol class="list-decimal pl-5 text-sm text-[var(--wa-muted)] space-y-1">
+                <li>Buka WhatsApp di ponsel.</li>
+                <li>Masuk ke <em>Perangkat Tertaut / Linked Devices</em>.</li>
+                <li>Tap <em>Tautkan Perangkat / Link a Device</em>, lalu arahkan kamera ke QR di samping.</li>
+              </ol>
+            </div>
+
+            <div class="text-sm text-[var(--wa-muted)]">
+              <p>QR diperbarui otomatis bila kadaluarsa.</p>
+              <p class="mt-1">Jika QR tidak muncul, cek <code>docker compose logs -f</code>.</p>
+            </div>
+
+            <div class="flex items-center gap-2 text-xs">
+              <span class="inline-block w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span>
+              <span id="qrHint" class="text-[var(--wa-muted)]">Menunggu kode QR…</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="px-6 pb-6 text-xs text-[var(--wa-muted)]">
+          Endpoint: <code class="bg-[var(--wa-input)] px-1 py-0.5 rounded">/health</code>,
+          QR via <code class="bg-[var(--wa-input)] px-1 py-0.5 rounded">/qr/stream</code>.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Screen: Composer ===== -->
+  <section id="screen-compose" class="min-h-[calc(100vh-64px)] hidden">
+    <div class="mx-auto max-w-6xl px-4 py-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <!-- Sidebar: Kontak (sticky; scroll HANYA di daftar kontak) -->
+      <aside id="sidebar"
+        class="lg:col-span-1 bg-[var(--wa-panel)] rounded-2xl shadow flex flex-col
+               sticky top-[64px] h-[calc(100vh-64px)] overflow-hidden">
+
+        <!-- Header kontak -->
+        <div class="bg-[var(--wa-input)]/60 px-5 py-3 flex items-center justify-between">
+          <h2 class="text-base font-semibold">Kontak</h2>
+          <div class="flex items-center gap-3">
+            <label class="text-xs flex items-center gap-2 select-none">
+              <select id="limitSelect" class="bg-[var(--wa-input)] rounded-lg px-2 py-1 text-xs">
+                <option value="50">Tampil 50</option>
+                <option value="100">Tampil 100</option>
+                <option value="all">Tampil Semua</option>
+              </select>
+            </label>
+            <span id="contactsCount" class="text-xs text-[var(--wa-muted)]">0 kontak</span>
+          </div>
+        </div>
+
+        <!-- Pencarian & aksi (tetap; di atas area scroll) -->
+        <div class="p-4 border-b border-white/5">
+          <div class="relative">
+            <input id="searchInput" type="text" placeholder="Cari nama/nomor…"
+              class="w-full pl-9 pr-3 py-2 rounded-xl bg-[var(--wa-input)] text-[var(--wa-text)] placeholder-[var(--wa-muted)] outline-none ring-1 ring-transparent focus:ring-[var(--wa-accent)]/40" />
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--wa-muted)]" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 1 0 14 15.5l.27.28v.79L20 21.49 21.49 20l-5.99-6zM10.5 15A4.5 4.5 0 1 1 15 10.5 4.505 4.505 0 0 1 10.5 15z"/></svg>
+          </div>
+
+          <div class="mt-3 flex flex-wrap gap-2 text-xs">
+            <button id="selectAllBtn" class="px-3 py-1.5 rounded-lg bg-[var(--wa-input)] hover:bg-[var(--wa-input)]/80 transition">Pilih semua (tampilan)</button>
+            <button id="clearSelectionBtn" class="px-3 py-1.5 rounded-lg bg-[var(--wa-input)] hover:bg-[var(--wa-input)]/80 transition">Hapus pilihan</button>
+            <button id="refreshContactsBtn" class="px-3 py-1.5 rounded-lg bg-[var(--wa-input)] hover:bg-[var(--wa-input)]/80 transition">Muat ulang</button>
+          </div>
+        </div>
+
+        <!-- Area scroll daftar kontak -->
+        <div id="contactsList" class="flex-1 overflow-y-auto">
+          <div id="contactsViewport" class="divide-y divide-white/5"></div>
+        </div>
+
+        <div id="contactsLoader" class="hidden p-3 text-center text-xs text-[var(--wa-muted)]">Memuat kontak…</div>
+      </aside>
+
+      <!-- Main: Composer -->
+      <main class="lg:col-span-2 bg-[var(--wa-panel)] rounded-2xl shadow overflow-hidden">
+        <div class="bg-[var(--wa-input)]/60 px-5 py-3 flex items-center justify-between">
+          <h2 class="text-base font-semibold">Kirim Pesan</h2>
+          <div class="text-xs text-[var(--wa-muted)]">Koneksi aktif</div>
+        </div>
+
+        <div class="p-5 space-y-5">
+          <!-- Penerima terpilih -->
+          <section>
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-sm font-semibold">Penerima terpilih</h3>
+              <span id="selectedCount" class="text-xs text-[var(--wa-muted)]">0 penerima</span>
+            </div>
+            <div id="selectedChips" class="flex flex-wrap gap-2 min-h-[2.25rem]"></div>
+          </section>
+
+          <!-- Input nomor manual -->
+          <section class="bg-[var(--wa-input)]/40 rounded-xl p-4">
+            <h3 class="text-sm font-semibold mb-2">Tambahkan nomor manual</h3>
+            <div class="flex flex-col md:flex-row gap-3">
+              <input id="manualInput" type="text" placeholder="Contoh: +62812xxxxx, 62895yyyyy"
+                class="flex-1 px-3 py-2 rounded-xl bg-[var(--wa-input)] text-[var(--wa-text)] placeholder-[var(--wa-muted)] outline-none ring-1 ring-transparent focus:ring-[var(--wa-accent)]/40" />
+              <div class="flex gap-2">
+                <button id="addManualBtn" class="px-3 py-2 rounded-xl bg-[var(--wa-accent)] text-black font-semibold hover:brightness-95">Tambah</button>
+                <button id="clearManualBtn" class="px-3 py-2 rounded-xl bg-[var(--wa-input)] hover:bg-[var(--wa-input)]/80">Bersihkan</button>
+              </div>
+            </div>
+            <p class="mt-2 text-xs text-[var(--wa-muted)]">Pisahkan dengan koma/spasi/enter. Format internasional lebih aman.</p>
+          </section>
+
+          <!-- Pesan -->
+          <section>
+            <label class="block text-sm mb-1">Pesan</label>
+            <textarea id="message" rows="6" placeholder="Tulis pesan…"
+              class="w-full px-3 py-2 rounded-xl bg-[var(--wa-input)] text-[var(--wa-text)] placeholder-[var(--wa-muted)] outline-none ring-1 ring-transparent focus:ring-[var(--wa-accent)]/40 resize-y"></textarea>
+          </section>
+
+          <!-- Aksi -->
+          <div class="flex items-center justify-between gap-3">
+            <div class="text-xs text-[var(--wa-muted)]">Pesan akan dikirim ke penerima terpilih (kontak &/atau nomor manual).</div>
+            <button id="sendBroadcastBtn"
+              class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--wa-accent)] text-black font-semibold hover:brightness-95 active:brightness-90 transition">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+              Kirim Broadcast
+            </button>
+          </div>
+        </div>
+
+        <!-- Activity log -->
+        <div class="border-t border-white/5">
+          <div class="px-5 py-3 bg-[var(--wa-input)]/60">
+            <h3 class="text-sm font-semibold">Activity Log</h3>
+          </div>
+          <div id="log" class="p-5 max-h-64 overflow-y-auto text-sm space-y-2"></div>
+        </div>
+      </main>
+    </div>
+  </section>
+
+  <!-- Toast -->
+  <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 hidden px-4 py-2 rounded-xl bg-[var(--wa-input)] text-[var(--wa-text)] shadow-lg ring-1 ring-white/10">
+    <span id="toastText">Info</span>
+  </div>
+
+  <!-- ===== Scripts ===== -->
+  <script>
+    // ====== Elements ======
+    const statusDot = document.getElementById('statusDot');
+    const statusLabel = document.getElementById('statusLabel');
+    const subtitle = document.getElementById('subtitle');
+    const screenQR = document.getElementById('screen-qr');
+    const screenCompose = document.getElementById('screen-compose');
+    const qrCanvas = document.getElementById('qrCanvas');
+    const qrHint = document.getElementById('qrHint');
+
+    const logEl = document.getElementById('log');
+    const toast = document.getElementById('toast');
+    const toastText = document.getElementById('toastText');
+
+    // Contacts UI
+    const contactsCount = document.getElementById('contactsCount');
+    const contactsListEl = document.getElementById('contactsList');      // scroll container
+    const contactsViewport = document.getElementById('contactsViewport');
+    const contactsLoader = document.getElementById('contactsLoader');
+
+    const searchInput = document.getElementById('searchInput');
+    const selectAllBtn = document.getElementById('selectAllBtn');
+    const clearSelectionBtn = document.getElementById('clearSelectionBtn');
+    const refreshContactsBtn = document.getElementById('refreshContactsBtn');
+    const limitSelect = document.getElementById('limitSelect');
+
+    const selectedChips = document.getElementById('selectedChips');
+    const selectedCount = document.getElementById('selectedCount');
+
+    // Manual
+    const manualInput = document.getElementById('manualInput');
+    const addManualBtn = document.getElementById('addManualBtn');
+    const clearManualBtn = document.getElementById('clearManualBtn');
+
+    // Message
+    const messageEl = document.getElementById('message');
+    const sendBroadcastBtn = document.getElementById('sendBroadcastBtn');
+
+    // ====== State ======
+    let connected = false;
+
+    // Kontak all-in-one (tanpa pagination)
+    let contactsAll = [];             // semua kontak
+    const contactsIndex = new Map();  // jid -> index
+    let filtered = [];                // hasil filter (array objek), kosong = pakai subset default
+    const selectedJids = new Set();
+    const manualNumbers = new Set();
+
+    // ====== Utils ======
+    function showToast(msg, ok = true){
+      toastText.textContent = msg;
+      toast.classList.remove('hidden');
+      toast.style.background = ok ? 'var(--wa-input)' : '#3b1f21';
+      toast.style.color = ok ? 'var(--wa-text)' : '#fecaca';
+      setTimeout(() => toast.classList.add('hidden'), 2500);
+    }
+    function log(line){
+      const time = new Date().toLocaleTimeString();
+      const p = document.createElement('p');
+      p.innerHTML = `<span class="text-[var(--wa-muted)]">[${time}]</span> ${line}`;
+      logEl?.prepend(p);
+    }
+    async function renderQR(qrText){
+      if(!qrCanvas || !qrText) return;
+      const ctx = qrCanvas.getContext('2d');
+      ctx.clearRect(0,0,qrCanvas.width, qrCanvas.height);
+      try{
+        await QRCode.toCanvas(qrCanvas, qrText, { width: 280, margin: 1 });
+        qrHint.textContent = "Arahkan kamera WhatsApp ke QR ini.";
+      }catch{
+        qrHint.textContent = "Gagal merender QR. Muat ulang halaman.";
+      }
+    }
+    function setStatus(isConnected){
+      connected = isConnected;
+      if(isConnected){
+        statusDot.className = "inline-block w-3 h-3 rounded-full bg-[var(--wa-accent)]";
+        statusLabel.textContent = "Connected";
+        subtitle.textContent = "Tersambung • siap broadcast";
+        screenQR.classList.add('hidden');
+        screenCompose.classList.remove('hidden');
+        // load all contacts sekali
+        if (contactsAll.length === 0) {
+          loadContactsAll();
+        }
+      }else{
+        statusDot.className = "inline-block w-3 h-3 rounded-full bg-yellow-400 animate-pulse";
+        statusLabel.textContent = "Connecting…";
+        subtitle.textContent = "Belum tersambung • scan QR";
+        screenCompose.classList.add('hidden');
+        screenQR.classList.remove('hidden');
+      }
+    }
+
+    // ====== Contacts render (tanpa virtual & tanpa loadmore) ======
+    function renderContactsList(){
+      const limit = limitSelect.value === 'all' ? Infinity : parseInt(limitSelect.value, 10);
+      const src = filtered.length ? filtered : contactsAll;
+      const view = src.slice(0, limit);
+
+      contactsViewport.innerHTML = '';
+      const frag = document.createDocumentFragment();
+
+      for (const c of view) {
+        const checked = selectedJids.has(c.jid);
+        const row = document.createElement('div');
+        row.className = "row flex items-center gap-3 px-3 py-2 hover:bg-[var(--wa-input)]/60 cursor-pointer";
+        row.dataset.jid = c.jid;
+        row.innerHTML = `
+          <div class="w-9 h-9 rounded-full bg-[var(--wa-input)] grid place-items-center text-xs">${(c.name||c.number||'').slice(0,2).toUpperCase()}</div>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm truncate">${c.name || '(tanpa nama)'}</div>
+            <div class="text-xs text-[var(--wa-muted)] truncate">${c.number}</div>
+          </div>
+          <div class="w-4 h-4 rounded border border-white/20 grid place-items-center">
+            ${checked ? '<div class="w-2.5 h-2.5 bg-[var(--wa-accent)] rounded"></div>' : ''}
+          </div>
+        `;
+        row.addEventListener('click', ()=>{
+          if (selectedJids.has(c.jid)) selectedJids.delete(c.jid);
+          else selectedJids.add(c.jid);
+          updateSelectedChips();
+          renderContactsList(); // refresh icon centang
+        });
+        frag.appendChild(row);
+      }
+
+      contactsViewport.appendChild(frag);
+      contactsCount.textContent = `${contactsAll.length} kontak`;
+    }
+
+    function updateSelectedChips(){
+      selectedChips.innerHTML = '';
+      const frag = document.createDocumentFragment();
+
+      for (const jid of selectedJids) {
+        const idx = contactsIndex.get(jid);
+        const c = contactsAll[idx];
+        const label = (c?.name || c?.number || jid.replace('@s.whatsapp.net',''));
+        const chip = document.createElement('div');
+        chip.className = "chip px-2 py-1 rounded-lg text-xs inline-flex items-center gap-2";
+        chip.innerHTML = `<span>${label}</span><button title="hapus" aria-label="hapus">&times;</button>`;
+        chip.querySelector('button').addEventListener('click', ()=>{
+          selectedJids.delete(jid);
+          updateSelectedChips();
+          renderContactsList();
+        });
+        frag.appendChild(chip);
+      }
+      for (const num of manualNumbers) {
+        const chip = document.createElement('div');
+        chip.className = "chip px-2 py-1 rounded-lg text-xs inline-flex items-center gap-2";
+        chip.innerHTML = `<span>${num}</span><button title="hapus" aria-label="hapus">&times;</button>`;
+        chip.querySelector('button').addEventListener('click', ()=>{
+          manualNumbers.delete(num);
+          updateSelectedChips();
+        });
+        frag.appendChild(chip);
+      }
+
+      selectedChips.appendChild(frag);
+      selectedCount.textContent = `${selectedJids.size + manualNumbers.size} penerima`;
+    }
+
+    // Search (client-side, seluruh data)
+    let searchDebounce;
+    function applyFilter(q){
+      const term = q.trim().toLowerCase();
+      if (!term) filtered = [];
+      else {
+        filtered = contactsAll.filter(c => {
+          const key = `${(c.name||'').toLowerCase()} ${String(c.number||'').toLowerCase()}`;
+          return key.includes(term);
+        });
+      }
+      // reset scroll
+      contactsListEl.scrollTop = 0;
+      renderContactsList();
+    }
+
+    // Merge (append + dedup) jika suatu saat kamu mau panggil ulang /contacts
+    function mergeContacts(all){
+      let added = 0;
+      for (const c of all) {
+        if (!c?.jid) continue;
+        if (contactsIndex.has(c.jid)) continue;
+        contactsIndex.set(c.jid, contactsAll.length);
+        contactsAll.push(c);
+        added++;
+      }
+      return added;
+    }
+
+    async function loadContactsAll(){
+      contactsLoader.classList.remove('hidden');
+      try{
+        // kecil jeda biar store terisi
+        await new Promise(r => setTimeout(r, 800));
+        const res = await fetch('/contacts', { cache: 'no-store' });
+        const data = await res.json();
+        if (data?.ok) {
+          contactsAll = [];
+          contactsIndex.clear();
+          mergeContacts(data.contacts || data || []); // suport dua bentuk (objek {contacts:[]} atau array)
+          showToast(`Memuat ${contactsAll.length} kontak ✅`, true);
+          renderContactsList();
+        } else {
+          showToast('Gagal memuat kontak', false);
+        }
+      }catch(e){
+        showToast('Tidak bisa mengambil kontak', false);
+      }finally{
+        contactsLoader.classList.add('hidden');
+      }
+    }
+
+    // ====== Manual numbers ======
+    function normalizeNumbers(input){
+      return input
+        .split(/[\s,;\n\r]+/g)
+        .map(s => s.trim())
+        .filter(Boolean)
+        .map(s => s.replace(/[^\d+]/g, ''));
+    }
+    addManualBtn.addEventListener('click', () => {
+      const nums = normalizeNumbers(manualInput.value);
+      if(!nums.length) return;
+      nums.forEach(n => manualNumbers.add(n));
+      manualInput.value = "";
+      updateSelectedChips();
+      showToast(`Ditambahkan ${nums.length} nomor manual ✅`, true);
+    });
+    clearManualBtn.addEventListener('click', () => {
+      manualNumbers.clear();
+      updateSelectedChips();
+    });
+
+    // ====== Aksi UI ======
+    searchInput.addEventListener('input', ()=>{
+      clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(()=>applyFilter(searchInput.value), 120);
+    });
+    limitSelect.addEventListener('change', renderContactsList);
+    selectAllBtn.addEventListener('click', ()=>{
+      const limit = limitSelect.value === 'all' ? Infinity : parseInt(limitSelect.value, 10);
+      const src = filtered.length ? filtered : contactsAll;
+      const view = src.slice(0, limit);
+      view.forEach(c => selectedJids.add(c.jid));
+      updateSelectedChips();
+      renderContactsList();
+    });
+    clearSelectionBtn.addEventListener('click', ()=>{
+      selectedJids.clear();
+      updateSelectedChips();
+      renderContactsList();
+    });
+    refreshContactsBtn.addEventListener('click', ()=>{
+      // muat ulang semua (append-safe; tapi kita reset agar rapi)
+      loadContactsAll();
+    });
+
+    // ====== Broadcast ======
+//    const sendBroadcastBtn = document.getElementById('sendBroadcastBtn');
+    sendBroadcastBtn.addEventListener('click', async () => {
+      if(!connected){ showToast("Belum terhubung ke WhatsApp", false); return; }
+      const total = selectedJids.size + manualNumbers.size;
+      const text = messageEl.value.trim();
+      if(!text){ showToast("Pesan tidak boleh kosong", false); return; }
+      if(total === 0){ showToast("Pilih kontak atau tambah nomor dulu", false); return; }
+
+      sendBroadcastBtn.disabled = true;
+      const btnHTML = sendBroadcastBtn.innerHTML;
+      sendBroadcastBtn.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2a1 1 0 0 1 1 1v2a1 1 0 1 1-2 0V3a1 1 0 0 1 1-1zM21 11h-2a1 1 0 1 1 0-2h2a1 1 0 1 1 0 2zM4 13a1 1 0 1 1 0-2H2a1 1 0 1 1 0 2h2z"/>
+        </svg> Mengirim…`;
+
+      try{
+        const payload = {
+          jids: Array.from(selectedJids),
+          numbers: Array.from(manualNumbers),
+          message: text
+        };
+        const res = await fetch("/broadcast", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if(res.ok && data?.ok){
+          showToast(`Broadcast terkirim ke ${data.total} tujuan ✅`, true);
+          log(`Broadcast: ${data.total} tujuan`);
+        }else{
+          showToast(data?.error || "Broadcast gagal", false);
+          log(`<span class="text-red-300">Gagal:</span> ${data?.error || res.status}`);
+        }
+      }catch(err){
+        showToast("Tidak bisa menghubungi server", false);
+        log(`<span class="text-red-300">Error:</span> ${err?.message || err}`);
+      }finally{
+        sendBroadcastBtn.disabled = false;
+        sendBroadcastBtn.innerHTML = btnHTML;
+      }
+    });
+
+    // ====== SSE & Polling ======
+    function startSSE(){
+      try{
+        const es = new EventSource("/qr/stream");
+        es.addEventListener("status", (e)=>{
+          const data = JSON.parse(e.data || "{}");
+          setStatus(!!data.connected);
+        });
+        es.addEventListener("qr", async (e)=>{
+          const data = JSON.parse(e.data || "{}");
+          if(data.qr){ await renderQR(data.qr); }
+        });
+        es.onerror = () => {};
+      }catch(_){}
+    }
+    async function pollHealth(){
+      try{
+        const res = await fetch("/health", { cache: "no-store" });
+        const data = await res.json();
+        setStatus(!!data?.connected);
+        if(!data?.connected){
+          const r = await fetch("/qr", { cache: "no-store" });
+          const j = await r.json();
+          if(j?.qr) await renderQR(j.qr);
+        }
+      }catch{
+        setStatus(false);
+      }
+    }
+
+    // ====== Init ======
+    startSSE();
+    pollHealth();
+    setInterval(pollHealth, 6000);
+  </script>
+</body>
+</html>

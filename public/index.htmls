@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>WA Multi-Account</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Tailwind theme tweak (warna ala WhatsApp)
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            wa: {
+              dark: '#075E54',
+              primary: '#25D366',
+              bg: '#ECE5DD',
+              chip: '#DCF8C6'
+            }
+          },
+          borderRadius: { xl2: '1.25rem' }
+        }
+      }
+    }
+  </script>
+  <style>
+    .fade-in { animation: fadein .25s ease-out }
+    @keyframes fadein { from {opacity:0; transform:translateY(4px)} to {opacity:1; transform:none} }
+  </style>
+</head>
+<body class="bg-wa-bg text-gray-900">
+  <!-- Topbar (lebih ringkas, mobile-first) -->
+  <header class="bg-wa-dark text-white">
+    <div class="max-w-5xl mx-auto px-3 py-2 flex items-center justify-between gap-2">
+      <h1 class="text-base sm:text-lg font-semibold truncate">WA Multi-Account</h1>
+      <span class="text-[11px] sm:text-xs opacity-80 whitespace-nowrap">Demo UI</span>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto p-3 sm:p-4 space-y-4 sm:space-y-6">
+    <!-- Actions -->
+    <section class="flex items-center justify-between gap-2">
+      <div class="min-w-0">
+        <h2 class="text-base sm:text-lg font-semibold truncate">Akun Terdaftar</h2>
+        <p class="text-xs sm:text-sm text-gray-600 truncate">Kelola akun, scan QR, kirim pesan.</p>
+      </div>
+      <button id="btnAdd" class="fade-in inline-flex items-center gap-2 rounded-lg sm:rounded-xl bg-wa-dark text-white px-3 py-2 sm:px-4 sm:py-2 hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed">
+        <span class="btn-label">Tambah Akun</span>
+        <span class="btn-spin hidden" aria-hidden="true">
+          <svg class="animate-spin h-4 w-4 sm:h-5 sm:w-5" viewBox="0 0 24 24" fill="none">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4A4 4 0 008 12H4z"/>
+          </svg>
+        </span>
+      </button>
+    </section>
+
+    <!-- Sessions List -->
+    <section id="sessionsWrap" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+      <!-- cards injected -->
+    </section>
+
+    <!-- Send Message Panel -->
+    <section class="bg-white rounded-xl sm:rounded-2xl shadow-sm border p-3 sm:p-5">
+      <div class="flex items-center justify-between mb-2 sm:mb-3 gap-2">
+        <h3 class="text-sm sm:text-base md:text-lg font-semibold">Kirim Pesan</h3>
+        <button id="btnRefreshSessions" class="inline-flex items-center gap-2 text-xs sm:text-sm text-gray-800 hover:text-black rounded-lg border px-3 py-1.5 disabled:opacity-60 disabled:cursor-not-allowed">
+          <span class="btn-label">Refresh Akun</span>
+          <span class="btn-spin hidden" aria-hidden="true">
+            <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4A4 4 0 008 12H4z"/>
+            </svg>
+          </span>
+        </button>
+      </div>
+      <form id="sendForm" class="space-y-3">
+        <div class="grid sm:grid-cols-3 gap-3">
+          <div class="sm:col-span-1">
+            <label class="text-xs sm:text-sm font-medium">Pilih Akun</label>
+            <select id="sessionSelect" class="mt-1 w-full rounded-lg border-gray-300 focus:border-wa-dark focus:ring-wa-dark text-sm">
+              <option value="">-- pilih akun terhubung --</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs sm:text-sm font-medium">Nomor (E.164)</label>
+            <input id="numberInput" type="text" placeholder="+628123456789"
+              class="mt-1 w-full rounded-lg border-gray-300 focus:border-wa-dark focus:ring-wa-dark text-sm"/>
+          </div>
+          <div class="sm:col-span-3">
+            <label class="text-xs sm:text-sm font-medium">Pesan</label>
+            <textarea id="messageInput" rows="4" placeholder="Halo dari akun pilihan…"
+              class="mt-1 w-full rounded-lg border-gray-300 focus:border-wa-dark focus:ring-wa-dark text-sm"></textarea>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <button id="btnSend" class="inline-flex items-center gap-2 rounded-lg bg-wa-primary text-wa-dark font-medium px-4 py-2 hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed" type="submit">
+            <span class="btn-label">Kirim</span>
+            <span class="btn-spin hidden" aria-hidden="true">
+              <svg class="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4A4 4 0 008 12H4z"/>
+              </svg>
+            </span>
+          </button>
+          <span id="sendStatus" class="text-xs sm:text-sm text-gray-700" aria-live="polite"></span>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <!-- Add Account Modal -->
+  <div id="addModal" class="hidden fixed inset-0 z-20">
+    <div class="absolute inset-0 bg-black/50"></div>
+    <div class="fade-in relative max-w-lg mx-auto mt-16 sm:mt-24 bg-white rounded-xl sm:rounded-2xl shadow-lg border p-4 sm:p-5">
+      <div class="flex items-center justify-between mb-2 sm:mb-3">
+        <h3 class="text-base sm:text-lg font-semibold">Tambah Akun</h3>
+        <button id="btnCloseAdd" class="text-gray-600 hover:text-black">✕</button>
+      </div>
+      <div class="space-y-3">
+        <label class="text-xs sm:text-sm font-medium">Nama Akun (sessionId)</label>
+        <input id="sessionIdInput" type="text" placeholder="mis. brand-1"
+               class="w-full rounded-lg border-gray-300 focus:border-wa-dark focus:ring-wa-dark text-sm"/>
+        <button id="btnCreateSession" class="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-wa-dark text-white px-4 py-2 hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed">
+          <span class="btn-label">Buat & Tampilkan QR</span>
+          <span class="btn-spin hidden" aria-hidden="true">
+            <svg class="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a 8 8 0 018-8v4A4 4 0 008 12H4z"/>
+            </svg>
+          </span>
+        </button>
+
+        <div id="qrArea" class="hidden">
+          <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+            <div class="flex flex-col items-center justify-center">
+              <div class="relative">
+                <img id="qrImg" alt="QR" class="w-52 h-52 sm:w-56 sm:h-56 rounded-xl border shadow-sm bg-white object-contain"/>
+                <div id="qrSpinner" class="hidden absolute inset-0 flex items-center justify-center">
+                  <svg class="animate-spin h-8 w-8 text-wa-dark" viewBox="0 0 24 24" fill="none">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4A4 4 0 008 12H4z"/>
+                  </svg>
+                </div>
+              </div>
+              <div class="text-[11px] sm:text-xs text-gray-500 mt-2 text-center">
+                Scan QR dengan WhatsApp pada perangkat yang ingin ditautkan.
+              </div>
+            </div>
+            <div class="text-xs sm:text-sm text-gray-700">
+              <ol class="list-decimal ml-4 space-y-1">
+                <li>Buka WhatsApp di ponsel.</li>
+                <li>Menu &gt; Perangkat tertaut.</li>
+                <li>Ketuk <b>Tautkan perangkat</b>, lalu scan QR di sini.</li>
+              </ol>
+              <div id="qrStatus" class="mt-2 text-[11px] sm:text-xs text-gray-600" aria-live="polite">Menunggu scan…</div>
+            </div>
+          </div>
+        </div>
+        <div id="addError" class="hidden text-sm text-red-600" aria-live="assertive"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-30 bg-wa-dark text-white px-4 py-2 rounded-xl shadow-lg"></div>
+
+  <script>
+    // ==== CONFIG ====
+    const API_BASE = ""; // same origin; ganti jika backend beda host
+
+    // ==== helpers ====
+    const $ = (q, el=document) => el.querySelector(q);
+    const show = (el) => el.classList.remove('hidden');
+    const hide = (el) => el.classList.add('hidden');
+    const toast = (msg, ok=true) => {
+      const t = $('#toast');
+      t.textContent = msg;
+      t.className = `fixed bottom-4 left-1/2 -translate-x-1/2 z-30 px-4 py-2 rounded-xl shadow-lg ${ok ? 'bg-wa-dark text-white' : 'bg-red-600 text-white'}`;
+      show(t); setTimeout(()=> hide(t), 2000);
+    };
+
+    function setBtnLoading(btn, loading=true) {
+      if (!btn) return;
+      const label = btn.querySelector('.btn-label');
+      const spin = btn.querySelector('.btn-spin');
+      btn.disabled = !!loading;
+      if (label && spin) {
+        if (loading) { label.classList.add('opacity-0'); show(spin); }
+        else { label.classList.remove('opacity-0'); hide(spin); }
+      }
+    }
+
+    async function api(path, opts={}) {
+      const res = await fetch(API_BASE + path, {
+        headers: { 'Content-Type': 'application/json', ...(opts.headers||{}) },
+        ...opts
+      });
+      if (!res.ok) throw new Error((await res.text()) || ('HTTP ' + res.status));
+      const ct = res.headers.get('content-type') || '';
+      return ct.includes('application/json') ? res.json() : res.text();
+    }
+
+    const formatStatusBadge = (s) => {
+      if (s.isConnected) {
+        return '<span class="rounded-lg bg-wa-chip text-wa-dark text-[11px] px-2 py-0.5">connected</span>';
+      }
+      return s.hasQR
+        ? '<span class="rounded-lg bg-yellow-100 text-yellow-700 text-[11px] px-2 py-0.5">scan QR</span>'
+        : '<span class="rounded-lg bg-gray-200 text-gray-700 text-[11px] px-2 py-0.5">offline</span>';
+    };
+
+    // ==== Sessions ====
+    async function loadSessions() {
+      try {
+        const list = await api('/sessions', { method: 'GET' });
+        renderSessions(list);
+        fillSelect(list);
+      } catch (e) {
+        console.error(e);
+        toast('Gagal memuat sesi', false);
+      }
+    }
+
+    function renderSessions(list) {
+      const wrap = $('#sessionsWrap');
+      wrap.innerHTML = '';
+      list.forEach(s => {
+        const card = document.createElement('div');
+        card.className = 'fade-in bg-white rounded-xl sm:rounded-2xl shadow-sm border p-3 sm:p-4 flex flex-col gap-3';
+        card.innerHTML = `
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <div class="font-semibold truncate text-sm sm:text-base" title="${s.sessionId}">${s.sessionId}</div>
+              <div class="text-xs text-gray-600 mt-0.5">Status: ${formatStatusBadge(s)}</div>
+            </div>
+            <div class="flex gap-2 shrink-0">
+              <button data-action="qr" data-id="${s.sessionId}" class="btn-qr text-xs sm:text-sm rounded-lg border px-3 py-1.5 hover:bg-gray-50 inline-flex items-center gap-2">
+                <span class="btn-label">Lihat QR</span>
+                <span class="btn-spin hidden" aria-hidden="true">
+                  <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4A4 4 0 008 12H4z"/>
+                  </svg>
+                </span>
+              </button>
+              <button data-action="send" data-id="${s.sessionId}" class="text-xs sm:text-sm rounded-lg bg-wa-primary text-wa-dark font-medium px-3 py-1.5 hover:brightness-110">
+                Kirim
+              </button>
+            </div>
+          </div>
+        `;
+        wrap.appendChild(card);
+      });
+    }
+
+    function fillSelect(list) {
+      const select = $('#sessionSelect');
+      const current = select.value;
+      select.innerHTML = '<option value="">-- pilih akun terhubung --</option>';
+      list.filter(s => s.isConnected).forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.sessionId; opt.textContent = s.sessionId;
+        select.appendChild(opt);
+      });
+      if (list.some(s => s.sessionId === current && s.isConnected)) {
+        select.value = current;
+      }
+    }
+
+    // ==== Add / QR Modal ====
+    let qrPollTimer = null;
+    let qrBtnInProgress = null; // simpan ref tombol kartu yang lagi loading
+
+    function openAddModal() { show($('#addModal')); $('#sessionIdInput').focus(); }
+    function closeAddModal() {
+      hide($('#addModal'));
+      $('#qrImg').src=''; hide($('#qrArea')); hide($('#qrSpinner'));
+      $('#addError').textContent=''; hide($('#addError'));
+      if (qrPollTimer) { clearInterval(qrPollTimer); qrPollTimer=null; }
+      setBtnLoading($('#btnCreateSession'), false);
+      setBtnLoading($('#btnAdd'), false);
+      if (qrBtnInProgress) { setBtnLoading(qrBtnInProgress, false); qrBtnInProgress=null; }
+    }
+
+    async function createSession() {
+      const btn = $('#btnCreateSession');
+      setBtnLoading(btn, true);
+      const id = $('#sessionIdInput').value.trim();
+      if (!id) { toast('Isi nama akun', false); setBtnLoading(btn,false); return; }
+      try {
+        await api('/sessions', { method: 'POST', body: JSON.stringify({ sessionId: id, forceNew: true }) });
+        show($('#qrArea'));
+        toast('Sesi dibuat. Memuat QR…');
+        await loadAndPollQR(id);
+      } catch (e) {
+        $('#addError').textContent = e.message || 'Gagal membuat sesi';
+        show($('#addError'));
+      } finally {
+        setBtnLoading(btn, false);
+      }
+    }
+
+    async function loadAndPollQR(sessionId) {
+      const fetchQR = async () => {
+        try {
+          show($('#qrSpinner'));
+          const { qr, message } = await api(`/sessions/${encodeURIComponent(sessionId)}/qr`, { method: 'GET' });
+          if (qr) {
+            $('#qrImg').src = `data:image/png;base64,${qr}`;
+            $('#qrStatus').textContent = 'QR tersedia. Silakan scan dari WhatsApp.';
+          } else {
+            $('#qrImg').src = '';
+            $('#qrStatus').textContent = message === 'connected' ? '✅ Terhubung!' : 'Menunggu QR…';
+          }
+          if (message === 'connected') {
+            if (qrPollTimer) { clearInterval(qrPollTimer); qrPollTimer=null; }
+            hide($('#qrSpinner'));
+            toast('Akun terhubung!');
+            await loadSessions();
+            if (qrBtnInProgress) { setBtnLoading(qrBtnInProgress, false); qrBtnInProgress=null; }
+          } else {
+            hide($('#qrSpinner'));
+          }
+        } catch (e) {
+          hide($('#qrSpinner'));
+          console.warn('QR fetch error:', e.message);
+        }
+      };
+      await fetchQR();
+      if (qrPollTimer) clearInterval(qrPollTimer);
+      qrPollTimer = setInterval(fetchQR, 2500);
+    }
+
+    // ==== Send Message ====
+    async function sendMessage(e) {
+      e.preventDefault();
+      const btn = $('#btnSend');
+      setBtnLoading(btn, true);
+      const sessionId = $('#sessionSelect').value.trim();
+      const number = $('#numberInput').value.trim();
+      const message = $('#messageInput').value.trim();
+      const status = $('#sendStatus');
+      if (!sessionId) { toast('Pilih akun terlebih dahulu', false); setBtnLoading(btn,false); return; }
+      if (!number || !message) { toast('Nomor & pesan wajib diisi', false); setBtnLoading(btn,false); return; }
+      status.textContent = 'Mengirim…';
+      try {
+        await api('/send-message', { method: 'POST', body: JSON.stringify({ sessionId, number, message }) });
+        status.textContent = '✅ Pesan terkirim';
+        toast('Pesan terkirim');
+        $('#messageInput').focus();
+      } catch (e) {
+        status.textContent = '❌ Gagal mengirim';
+        toast('Gagal mengirim pesan', false);
+      } finally {
+        setTimeout(()=> status.textContent='', 2000);
+        setBtnLoading(btn, false);
+      }
+    }
+
+    // ==== Realtime via SSE (fallback ke polling) ====
+    function initSSE() {
+      try {
+        const es = new EventSource(API_BASE + '/events');
+        es.onopen = () => console.log('SSE connected');
+        es.onerror = () => console.log('SSE error (fallback polling aktif)');
+        es.addEventListener('sessions', (ev) => {
+          try {
+            const list = JSON.parse(ev.data || '[]');
+            renderSessions(list);
+            fillSelect(list);
+          } catch {}
+        });
+      } catch (e) {
+        console.log('SSE unsupported, using polling');
+        setInterval(loadSessions, 10000);
+      }
+    }
+
+    // ==== Event bindings (gunakan closest('button')) ====
+    document.addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('button'); // penting: klik di span/tulisan tetap dianggap tombol
+      if (!btn) return;
+
+      // Add
+      if (btn.id === 'btnAdd') { setBtnLoading(btn, true); openAddModal(); setBtnLoading(btn, false); }
+
+      // Close modal
+      if (btn.id === 'btnCloseAdd') { closeAddModal(); }
+
+      // Refresh
+      if (btn.id === 'btnRefreshSessions') {
+        setBtnLoading(btn, true);
+        try { await loadSessions(); } finally { setBtnLoading(btn, false); }
+      }
+
+      // Create Session
+      if (btn.id === 'btnCreateSession') { createSession(); }
+
+      // Dynamic buttons on cards
+      const action = btn.dataset?.action;
+      if (action === 'qr') {
+        // spinner selama polling QR (panjang)
+        qrBtnInProgress = btn;
+        setBtnLoading(btn, true);
+        openAddModal();
+        $('#sessionIdInput').value = btn.dataset.id || '';
+        show($('#qrArea'));
+        await loadAndPollQR(btn.dataset.id);
+        // stop spinner di closeAddModal() atau saat connected
+      }
+      if (action === 'send') {
+        const id = btn.dataset.id;
+        const sel = $('#sessionSelect');
+        if ([...sel.options].some(o => o.value === id)) sel.value = id;
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        $('#numberInput').focus();
+      }
+    });
+
+    $('#sendForm').addEventListener('submit', sendMessage);
+
+    // init
+    (async () => {
+      setBtnLoading($('#btnRefreshSessions'), true);
+      await loadSessions();
+      setBtnLoading($('#btnRefreshSessions'), false);
+      initSSE(); // coba SSE, fallback polling di dalamnya
+    })();
+  </script>
+</body>
+</html>
